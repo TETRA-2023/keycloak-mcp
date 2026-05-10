@@ -17,6 +17,14 @@ mcp = FastMCP(
     "Keycloak MCP Server",
     host=settings.host,
     port=settings.port,
+    # LiteLLM gateway compatibility: prevents the gateway from getting a
+    # session-id+SSE-framed response that it can't sync-probe for health
+    # (`/v1/mcp/server/health` returns "unknown" otherwise). Each MCP request
+    # is handled stateless and gets a one-shot JSON response — same posture
+    # as umami-mcp's TS-side fix (memory: `umami-mcp-via-lite-llm-gateway-
+    # done-2026-05-05-us-835` lessons #1 and #2).
+    stateless_http=True,
+    json_response=True,
 )
 
 
