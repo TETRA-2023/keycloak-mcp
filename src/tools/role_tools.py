@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -109,9 +109,7 @@ async def update_realm_role(
     if composite is not None:
         current_role["composite"] = composite
 
-    await client._make_request(
-        "PUT", f"/roles/{role_name}", data=current_role, realm=realm
-    )
+    await client._make_request("PUT", f"/roles/{role_name}", data=current_role, realm=realm)
     return {
         "status": "updated",
         "message": f"Realm role {role_name} updated successfully",
@@ -119,9 +117,7 @@ async def update_realm_role(
 
 
 @mcp.tool()
-async def delete_realm_role(
-    role_name: str, realm: Optional[str] = None
-) -> Dict[str, str]:
+async def delete_realm_role(role_name: str, realm: Optional[str] = None) -> Dict[str, str]:
     """
     Delete a realm role.
 
@@ -199,9 +195,7 @@ async def create_client_role(
     if description:
         role_data["description"] = description
 
-    await client._make_request(
-        "POST", f"/clients/{client_id}/roles", data=role_data, realm=realm
-    )
+    await client._make_request("POST", f"/clients/{client_id}/roles", data=role_data, realm=realm)
     return {"status": "created", "message": f"Client role {name} created successfully"}
 
 

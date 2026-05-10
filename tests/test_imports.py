@@ -1,46 +1,62 @@
-"""Basic import tests that don't require Keycloak connection"""
+"""Smoke import tests — no Keycloak connection required."""
+
+from __future__ import annotations
 
 
 def test_can_import_main():
-    """Test that we can import the main module"""
-    from src.main import KeycloakMCPServer, main
+    from src.main import main
 
-    assert KeycloakMCPServer is not None
-    assert main is not None
+    assert callable(main)
 
 
 def test_can_import_tools():
-    """Test that we can import all tool modules"""
-    from src.tools import user_tools
-    from src.tools import client_tools
-    from src.tools import realm_tools
-    from src.tools import role_tools
-    from src.tools import group_tools
+    from src.tools import (
+        authentication_management_tools,
+        client_tools,
+        group_tools,
+        realm_tools,
+        role_tools,
+        user_tools,
+    )
 
-    # Just check they imported successfully
-    assert user_tools is not None
-    assert client_tools is not None
-    assert realm_tools is not None
-    assert role_tools is not None
-    assert group_tools is not None
+    for mod in (
+        authentication_management_tools,
+        client_tools,
+        group_tools,
+        realm_tools,
+        role_tools,
+        user_tools,
+    ):
+        assert mod is not None
 
 
 def test_can_import_keycloak_client():
-    """Test that we can import the Keycloak client"""
     from src.tools.keycloak_client import KeycloakClient
 
     assert KeycloakClient is not None
 
 
-def test_can_import_config():
-    """Test that we can import the config module"""
-    from src.common.config import Config
+def test_can_import_settings():
+    from src.common.config import KEYCLOAK_CFG, settings
 
-    assert Config is not None
+    assert settings is not None
+    assert KEYCLOAK_CFG is not None
+    assert "server_url" in KEYCLOAK_CFG
 
 
 def test_can_import_server():
-    """Test that we can import the server module"""
     from src.common.server import mcp
 
     assert mcp is not None
+
+
+def test_can_import_bearer_middleware():
+    from src.middleware.auth import BearerAuthMiddleware
+
+    assert BearerAuthMiddleware is not None
+
+
+def test_can_import_logging_filter():
+    from src.common.logging_filters import StandaloneSseWriterRaceFilter
+
+    assert StandaloneSseWriterRaceFilter is not None

@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -205,9 +205,7 @@ async def update_realm_events_config(
     if admin_events_details_enabled is not None:
         current_config["adminEventsDetailsEnabled"] = admin_events_details_enabled
 
-    await client._make_request(
-        "PUT", "/events/config", data=current_config, realm=realm
-    )
+    await client._make_request("PUT", "/events/config", data=current_config, realm=realm)
     return {"status": "updated", "message": "Events configuration updated successfully"}
 
 
@@ -226,9 +224,7 @@ async def get_realm_default_groups(realm: Optional[str] = None) -> List[Dict[str
 
 
 @mcp.tool()
-async def add_realm_default_group(
-    group_id: str, realm: Optional[str] = None
-) -> Dict[str, str]:
+async def add_realm_default_group(group_id: str, realm: Optional[str] = None) -> Dict[str, str]:
     """
     Add a default group to the realm.
 
@@ -244,9 +240,7 @@ async def add_realm_default_group(
 
 
 @mcp.tool()
-async def remove_realm_default_group(
-    group_id: str, realm: Optional[str] = None
-) -> Dict[str, str]:
+async def remove_realm_default_group(group_id: str, realm: Optional[str] = None) -> Dict[str, str]:
     """
     Remove a default group from the realm.
 

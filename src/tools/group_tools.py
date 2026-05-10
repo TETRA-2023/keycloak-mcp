@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -103,9 +103,7 @@ async def update_group(
         Status message
     """
     # Get current group
-    current_group = await client._make_request(
-        "GET", f"/groups/{group_id}", realm=realm
-    )
+    current_group = await client._make_request("GET", f"/groups/{group_id}", realm=realm)
 
     # Update only provided fields
     if name is not None:
@@ -115,9 +113,7 @@ async def update_group(
     if attributes is not None:
         current_group["attributes"] = attributes
 
-    await client._make_request(
-        "PUT", f"/groups/{group_id}", data=current_group, realm=realm
-    )
+    await client._make_request("PUT", f"/groups/{group_id}", data=current_group, realm=realm)
     return {"status": "updated", "message": f"Group {group_id} updated successfully"}
 
 
@@ -182,9 +178,7 @@ async def add_user_to_group(
     Returns:
         Status message
     """
-    await client._make_request(
-        "PUT", f"/users/{user_id}/groups/{group_id}", realm=realm
-    )
+    await client._make_request("PUT", f"/users/{user_id}/groups/{group_id}", realm=realm)
     return {"status": "added", "message": f"User {user_id} added to group {group_id}"}
 
 
@@ -203,9 +197,7 @@ async def remove_user_from_group(
     Returns:
         Status message
     """
-    await client._make_request(
-        "DELETE", f"/users/{user_id}/groups/{group_id}", realm=realm
-    )
+    await client._make_request("DELETE", f"/users/{user_id}/groups/{group_id}", realm=realm)
     return {
         "status": "removed",
         "message": f"User {user_id} removed from group {group_id}",
@@ -213,9 +205,7 @@ async def remove_user_from_group(
 
 
 @mcp.tool()
-async def get_user_groups(
-    user_id: str, realm: Optional[str] = None
-) -> List[Dict[str, Any]]:
+async def get_user_groups(user_id: str, realm: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get all groups for a user.
 

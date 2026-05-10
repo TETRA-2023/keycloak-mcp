@@ -1,36 +1,36 @@
-# Use a Python image with uv pre-installed
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Install the project into `/app`
+# Create non-root user
+RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
+
 WORKDIR /app
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock ./
 
-# Copy from the cache instead of linking since it's a mounted volume
-ENV UV_LINK_MODE=copy
+# Install dependencies only (reproducible from lockfile)
+RUN uv sync --frozen --no-install-project
 
-# Copy just the pyproject.toml first
-COPY pyproject.toml /app/
+# Copy application source
+COPY src/ src/
 
-# Install the project's dependencies without lock file
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-install-project --no-dev
+# Install the project itself (non-editable) so uv run doesn't need to write at runtime
+RUN uv sync --frozen --no-editable
 
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
-COPY . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev
+ENV UV_CACHE_DIR=/tmp/uv-cache \
+    PYTHONUNBUFFERED=1 \
+    TRANSPORT=streamable-http \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=8000
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
+USER appuser
 
-# Set transport mode to HTTP
-ENV TRANSPORT=http
+EXPOSE 8000
 
-# Reset the entrypoint, don't invoke `uv`
-ENTRYPOINT []
+# Liveness probe — hits the /health route the app registers on the streamable-http transport.
+# No-op for stdio mode (the route only exists when the HTTP transport is bound), but Docker
+# will report unhealthy in that case which is the correct semantic.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/app/.venv/bin/python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
 
-# Run the application directly using the venv Python
-CMD ["python", "-m", "src"]
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "src"]

@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -40,9 +40,7 @@ async def get_authentication_flow(
     Returns:
         Authentication flow object
     """
-    return await client._make_request(
-        "GET", f"/authentication/flows/{flow_id}", realm=realm
-    )
+    return await client._make_request("GET", f"/authentication/flows/{flow_id}", realm=realm)
 
 
 @mcp.tool()
@@ -81,9 +79,7 @@ async def create_authentication_flow(
     if id is not None:
         flow_data["id"] = id
 
-    await client._make_request(
-        "POST", "/authentication/flows", data=flow_data, realm=realm
-    )
+    await client._make_request("POST", "/authentication/flows", data=flow_data, realm=realm)
     return {"status": f"Authentication flow '{alias}' created successfully"}
 
 
@@ -102,9 +98,7 @@ async def delete_authentication_flow(
     Returns:
         Status message
     """
-    await client._make_request(
-        "DELETE", f"/authentication/flows/{flow_id}", realm=realm
-    )
+    await client._make_request("DELETE", f"/authentication/flows/{flow_id}", realm=realm)
     return {"status": "Authentication flow deleted successfully"}
 
 
@@ -176,9 +170,7 @@ async def copy_authentication_flow(
     await client._make_request(
         "POST", f"/authentication/flows/{flow_alias}/copy", data=copy_data, realm=realm
     )
-    return {
-        "status": f"Authentication flow '{flow_alias}' copied to '{new_name}' successfully"
-    }
+    return {"status": f"Authentication flow '{flow_alias}' copied to '{new_name}' successfully"}
 
 
 # Flow Executions Tools
@@ -339,9 +331,7 @@ async def delete_execution(
     Returns:
         Status message
     """
-    await client._make_request(
-        "DELETE", f"/authentication/executions/{execution_id}", realm=realm
-    )
+    await client._make_request("DELETE", f"/authentication/executions/{execution_id}", realm=realm)
     return {"status": "Execution deleted successfully"}
 
 
@@ -459,9 +449,7 @@ async def get_authenticator_config(
     Returns:
         Configuration object
     """
-    return await client._make_request(
-        "GET", f"/authentication/config/{config_id}", realm=realm
-    )
+    return await client._make_request("GET", f"/authentication/config/{config_id}", realm=realm)
 
 
 @mcp.tool()
@@ -544,9 +532,7 @@ async def delete_authenticator_config(
     Returns:
         Status message
     """
-    await client._make_request(
-        "DELETE", f"/authentication/config/{config_id}", realm=realm
-    )
+    await client._make_request("DELETE", f"/authentication/config/{config_id}", realm=realm)
     return {"status": "Configuration deleted successfully"}
 
 
@@ -623,9 +609,7 @@ async def get_authenticator_providers(
     Returns:
         List of authenticator provider objects
     """
-    return await client._make_request(
-        "GET", "/authentication/authenticator-providers", realm=realm
-    )
+    return await client._make_request("GET", "/authentication/authenticator-providers", realm=realm)
 
 
 @mcp.tool()
@@ -682,9 +666,7 @@ async def get_required_actions(
     Returns:
         List of required action objects
     """
-    return await client._make_request(
-        "GET", "/authentication/required-actions", realm=realm
-    )
+    return await client._make_request("GET", "/authentication/required-actions", realm=realm)
 
 
 @mcp.tool()

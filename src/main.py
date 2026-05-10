@@ -1,114 +1,120 @@
-"""
-Keycloak MCP Server
+"""Keycloak MCP Server entry point.
 
-A Python MCP server for managing Keycloak identity and access management.
-Supports both stdio and HTTP transports.
+Supports stdio and streamable-HTTP transports. HTTP mode wraps the FastMCP
+streamable_http_app with bearer-token middleware (when MCP_BEARER_TOKEN is
+set) and routes ``/health`` past it for unauthenticated liveness probes.
+
+Diverges from upstream:
+- Default transport is ``streamable-http`` (not ``stdio``) for the wrapper image.
+- Bind defaults to ``0.0.0.0`` so the published port is reachable from outside
+  the container.
+- CORS/Origin-validation middleware dropped — superseded by bearer enforcement
+  when the wrapper is fronted by an authenticating gateway.
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import sys
-import logging
-import uvicorn
-from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-from .common.server import mcp
+from pathlib import Path
 
-# Import all tool modules to register them with the MCP server
-from . import tools  # noqa: F401
-from .tools import user_tools  # noqa: F401
-from .tools import client_tools  # noqa: F401
-from .tools import realm_tools  # noqa: F401
-from .tools import role_tools  # noqa: F401
-from .tools import group_tools  # noqa: F401
+# Ensure ``src.*`` imports resolve when invoked as ``python -m src``.
+_PKG_ROOT = Path(__file__).parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 
-# Configure logging
+from src.common.config import settings  # noqa: E402
+from src.common.server import mcp  # noqa: E402
+
+# Import all tool modules to register their @mcp.tool() definitions.
+from src.tools import (  # noqa: E402, F401
+    authentication_management_tools,
+    client_tools,
+    group_tools,
+    realm_tools,
+    role_tools,
+    user_tools,
+)
+
 logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
+    level=os.getenv("LOG_LEVEL", settings.log_level),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stderr)],
 )
 logger = logging.getLogger(__name__)
 
 
-class OriginValidationMiddleware(BaseHTTPMiddleware):
-    """Middleware to validate Origin header to prevent DNS rebinding attacks"""
-
-    def __init__(self, app, allowed_origins=None):
-        super().__init__(app)
-        # Default to localhost origins for security
-        self.allowed_origins = allowed_origins or {
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-            "null",  # For file:// origins in development
-        }
-
-    async def dispatch(self, request, call_next):
-        # Skip validation for preflight OPTIONS requests
-        if request.method == "OPTIONS":
-            return await call_next(request)
-
-        origin = request.headers.get("origin")
-
-        # If no Origin header, allow (some clients don't send it)
-        if not origin:
-            return await call_next(request)
-
-        # Validate origin against allowed list
-        if origin not in self.allowed_origins:
-            logger.warning(f"Blocked request from unauthorized origin: {origin}")
-            return Response(
-                content="Forbidden: Invalid origin",
-                status_code=403,
-                headers={"Content-Type": "text/plain"},
-            )
-
-        return await call_next(request)
+VALID_TRANSPORTS = ("stdio", "streamable-http", "sse")
 
 
-def main():
-    transport_mode = os.getenv("TRANSPORT", "stdio")
+def _resolve_transport() -> str:
+    """Resolve transport from CLI args or env. CLI wins over env."""
+    if "--stdio" in sys.argv:
+        return "stdio"
+    if "--streamable-http" in sys.argv or "--http" in sys.argv:
+        return "streamable-http"
+    if "--sse" in sys.argv:
+        return "sse"
 
-    if transport_mode == "http":
-        logger.info("Keycloak MCP Server starting in HTTP mode...")
+    raw = (settings.transport or "stdio").lower().replace("_", "-")
+    # Accept ``http`` as an alias for ``streamable-http`` (upstream env name).
+    if raw == "http":
+        return "streamable-http"
+    if raw in VALID_TRANSPORTS:
+        return raw
+    logger.warning("Unknown TRANSPORT=%r, falling back to stdio", raw)
+    return "stdio"
 
-        # Create Starlette app with streamable HTTP
-        app = mcp.streamable_http_app()
 
-        # Get configuration from environment
-        port = int(os.environ.get("PORT", 8000))
+def _run_http(transport: str) -> None:
+    """Run streamable-HTTP (or SSE) transport: bearer middleware (when
+    configured), ``/health`` bypass, log filter.
+    """
+    import uvicorn
 
-        # Add security middleware (ORDER MATTERS)
-        # 1. Origin validation middleware (REQUIRED by MCP spec)
-        allowed_origins = {
-            f"http://localhost:{port}",
-            f"http://127.0.0.1:{port}",
-            "null",  # For file:// origins
-        }
-        app.add_middleware(OriginValidationMiddleware, allowed_origins=allowed_origins)
+    from src.common.logging_filters import StandaloneSseWriterRaceFilter
+    from src.middleware.auth import BearerAuthMiddleware
 
-        # 2. CORS middleware for browser-based clients
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=[f"http://localhost:{port}", f"http://127.0.0.1:{port}"],
-            allow_credentials=True,
-            allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["*"],
-            expose_headers=["mcp-session-id", "mcp-protocol-version"],
-            max_age=86400,
+    # Mute the upstream SDK's ClosedResourceError noise on session teardown.
+    sdk_logger = logging.getLogger("mcp.server.streamable_http")
+    if not any(isinstance(f, StandaloneSseWriterRaceFilter) for f in sdk_logger.filters):
+        sdk_logger.addFilter(StandaloneSseWriterRaceFilter())
+
+    app = mcp.streamable_http_app() if transport == "streamable-http" else mcp.sse_app()
+
+    if settings.has_bearer_token:
+        app = BearerAuthMiddleware(
+            app,
+            expected_token=settings.get_bearer_token_value(),
+            skip_paths=("/health",),
+        )
+        logger.info("Bearer-token middleware enabled for %s transport", transport)
+    else:
+        logger.warning(
+            "MCP_BEARER_TOKEN not set — %s transport accepts unauthenticated requests",
+            transport,
         )
 
-        logger.info(f"Listening on http://127.0.0.1:{port}/mcp/")
+    config = uvicorn.Config(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level.lower(),
+    )
+    logger.info("Listening on http://%s:%d/mcp/", settings.host, settings.port)
+    uvicorn.Server(config).run()
 
-        # Run with uvicorn
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
+def main() -> None:
+    transport = _resolve_transport()
+    logger.info("Starting Keycloak MCP server with %s transport", transport)
+    logger.info("Auth mode: %s, realm: %s", settings.auth_mode, settings.realm)
+
+    if transport == "stdio":
+        mcp.run(transport="stdio")
     else:
-        # stdio mode (default)
-        logger.info("Keycloak MCP Server starting in stdio mode...")
-
-        # Run with stdio transport
-        mcp.run()
+        _run_http(transport)
 
 
 if __name__ == "__main__":

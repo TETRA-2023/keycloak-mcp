@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -165,9 +165,7 @@ async def update_user(
     if attributes is not None:
         current_user["attributes"] = attributes
 
-    await client._make_request(
-        "PUT", f"/users/{user_id}", data=current_user, realm=realm
-    )
+    await client._make_request("PUT", f"/users/{user_id}", data=current_user, realm=realm)
     return {"status": "updated", "message": f"User {user_id} updated successfully"}
 
 
@@ -212,9 +210,7 @@ async def reset_user_password(
 
 
 @mcp.tool()
-async def get_user_sessions(
-    user_id: str, realm: Optional[str] = None
-) -> List[Dict[str, Any]]:
+async def get_user_sessions(user_id: str, realm: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get active sessions for a user.
 

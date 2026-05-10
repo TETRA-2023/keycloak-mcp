@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
-
 
 client = KeycloakClient()
 
@@ -56,9 +56,7 @@ async def get_client(id: str, realm: Optional[str] = None) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_client_by_clientid(
-    client_id: str, realm: Optional[str] = None
-) -> Dict[str, Any]:
+async def get_client_by_clientid(client_id: str, realm: Optional[str] = None) -> Dict[str, Any]:
     """
     Get a specific client by client ID.
 
@@ -210,9 +208,7 @@ async def update_client(
     if direct_access_grants_enabled is not None:
         current_client["directAccessGrantsEnabled"] = direct_access_grants_enabled
 
-    await client._make_request(
-        "PUT", f"/clients/{id}", data=current_client, realm=realm
-    )
+    await client._make_request("PUT", f"/clients/{id}", data=current_client, realm=realm)
     return {"status": "updated", "message": f"Client {id} updated successfully"}
 
 
@@ -244,15 +240,11 @@ async def get_client_secret(id: str, realm: Optional[str] = None) -> Dict[str, s
     Returns:
         Client secret object
     """
-    return await client._make_request(
-        "GET", f"/clients/{id}/client-secret", realm=realm
-    )
+    return await client._make_request("GET", f"/clients/{id}/client-secret", realm=realm)
 
 
 @mcp.tool()
-async def regenerate_client_secret(
-    id: str, realm: Optional[str] = None
-) -> Dict[str, str]:
+async def regenerate_client_secret(id: str, realm: Optional[str] = None) -> Dict[str, str]:
     """
     Regenerate the client secret.
 
@@ -263,15 +255,11 @@ async def regenerate_client_secret(
     Returns:
         New client secret object
     """
-    return await client._make_request(
-        "POST", f"/clients/{id}/client-secret", realm=realm
-    )
+    return await client._make_request("POST", f"/clients/{id}/client-secret", realm=realm)
 
 
 @mcp.tool()
-async def get_client_service_account(
-    id: str, realm: Optional[str] = None
-) -> Dict[str, Any]:
+async def get_client_service_account(id: str, realm: Optional[str] = None) -> Dict[str, Any]:
     """
     Get service account user for a client.
 
@@ -282,6 +270,4 @@ async def get_client_service_account(
     Returns:
         Service account user object
     """
-    return await client._make_request(
-        "GET", f"/clients/{id}/service-account-user", realm=realm
-    )
+    return await client._make_request("GET", f"/clients/{id}/service-account-user", realm=realm)

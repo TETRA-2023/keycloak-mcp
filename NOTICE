@@ -1,0 +1,17 @@
+keycloak-mcp (TETRA fork)
+Copyright (c) 2026 TETRA
+
+This product includes software originally developed by Ido Yudha:
+
+  mcp-keycloak — https://github.com/idoyudha/mcp-keycloak
+  Licensed under the MIT License (see LICENSE).
+
+The TETRA fork adds:
+- Bearer-token middleware on HTTP transports (src/middleware/auth.py)
+- /health route registered on the streamable-HTTP transport
+- OAuth2 client_credentials grant (in addition to upstream's password grant)
+- Configurable URL prefix (KEYCLOAK_BASE_PATH) for KC v17+ deployments
+- Pydantic-settings configuration with SecretStr handling
+- StandaloneSseWriterRaceFilter logging filter
+- Dockerfile aligned with TETRA scaffold (Python 3.12, non-root, healthcheck)
+- Registers authentication_management_tools (upstream omitted from __init__.py)
