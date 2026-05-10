@@ -1,0 +1,5 @@
+# Allowlisted findings from upstream history (idoyudha/mcp-keycloak v1.2.2 baseline).
+# Each entry is <commit>:<path>:<rule>:<line> as printed by gitleaks.
+#
+# 199bf361 — sample bearer token in upstream README curl example (not a real secret).
+199bf361942f9a4b58b90b454f1ea064f76f6029:README.md:curl-auth-header:203
