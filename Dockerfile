@@ -11,8 +11,9 @@ COPY pyproject.toml uv.lock ./
 # Install dependencies only (reproducible from lockfile)
 RUN uv sync --frozen --no-install-project
 
-# Copy application source
+# Copy application source + files referenced by pyproject (readme, license).
 COPY src/ src/
+COPY README.md LICENSE ./
 
 # Install the project itself (non-editable) so uv run doesn't need to write at runtime
 RUN uv sync --frozen --no-editable

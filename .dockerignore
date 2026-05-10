@@ -10,9 +10,10 @@ __pycache__
 .env.*
 !.env.example
 tests
-*.md
-LICENSE
 NOTICE
+CHANGELOG.md
+SECURITY.md
+CLAUDE.md
 .gitignore
 .dockerignore
 .python-version
