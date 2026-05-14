@@ -14,6 +14,13 @@ smoke verification).
 Surface contract: GET-then-PUT for updates; KC preserves the stored
 ``config.clientSecret`` when the GET response's ``"**********"``
 placeholder is echoed back on PUT.
+
+KC v26 gotcha discovered during T02 smoke (2026-05-14): the IDP
+``providerId`` field is immutable. PUT with a new providerId returns
+HTTP 200 but silently no-ops on that one field while accepting every
+other change in the same PUT body. To change providerId, delete +
+recreate via ``delete_identity_provider`` / ``create_identity_provider``
+(added in v1.8.0).
 """
 
 from __future__ import annotations
@@ -163,4 +170,92 @@ async def update_identity_provider(
             f"IDP {alias!r} on realm {realm if realm else client.realm_name} "
             f"updated: " + ", ".join(written)
         ),
+    }
+
+
+@mcp.tool()
+async def create_identity_provider(
+    body: Dict[str, Any],
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Create a new identity provider instance.
+
+    POST /admin/realms/{realm}/identity-provider/instances
+
+    Pass a full IDP body — at minimum ``alias``, ``providerId``, and a
+    ``config`` dict containing the upstream OIDC URLs + clientId +
+    clientSecret. Read-only fields are stripped automatically:
+    ``internalId`` (KC assigns a fresh UUID), ``types`` (KC metadata).
+
+    **Canonical replay-after-delete recipe** for flipping a KC v26 IDP's
+    immutable ``providerId`` (e.g. ``oidc`` → ``keycloak-oidc``):
+
+    1. ``original = await get_identity_provider(realm, alias)``
+    2. ``upstream_clients = await list_clients(upstream_realm,
+       client_id=original["config"]["clientId"])``
+    3. ``secret_resp = await get_client_secret(upstream_realm,
+       upstream_clients[0]["id"])``
+    4. Build the new body::
+
+           new_body = {**original, "providerId": "keycloak-oidc"}
+           new_body["config"] = {
+               **original["config"],
+               "clientSecret": secret_resp["value"],
+           }
+
+    5. ``await delete_identity_provider(realm, alias)``
+    6. ``await create_identity_provider(new_body, realm=realm)``
+
+    The actual ``clientSecret`` MUST be substituted in step 4 — the GET
+    response's ``"**********"`` placeholder works for PUT (KC preserves
+    on update) but NOT for POST (KC stores the literal placeholder string,
+    breaking the broker handshake).
+
+    Args:
+        body: Full IDP body. Required.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message with the created alias.
+    """
+    body = {k: v for k, v in body.items() if k not in ("internalId", "types")}
+    await client._make_request("POST", "/identity-provider/instances", data=body, realm=realm)
+    alias = body.get("alias", "<unknown>")
+    return {
+        "status": "created",
+        "message": (f"IDP {alias!r} created on realm {realm if realm else client.realm_name}"),
+    }
+
+
+@mcp.tool()
+async def delete_identity_provider(
+    alias: str,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Delete an identity provider instance. DESTRUCTIVE.
+
+    DELETE /admin/realms/{realm}/identity-provider/instances/{alias}
+
+    Cascades to the IDP's mappers (KC handles this server-side) but does
+    NOT touch the upstream broker client (which lives in a different
+    realm). Existing users with ``federated_identity`` records pointing
+    at this IDP get orphaned — recoverable by re-linking via
+    first-broker-login on a subsequent SSO attempt.
+
+    Always snapshot via ``get_identity_provider`` before calling. KC
+    postgres Duplicati backup is the full-restore path if needed.
+
+    Args:
+        alias: IDP alias to delete.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message.
+    """
+    await client._make_request("DELETE", f"/identity-provider/instances/{alias}", realm=realm)
+    return {
+        "status": "deleted",
+        "message": (f"IDP {alias!r} deleted from realm {realm if realm else client.realm_name}"),
     }
