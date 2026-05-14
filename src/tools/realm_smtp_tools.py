@@ -1,16 +1,21 @@
-"""Realm SMTP + attribute mutation tools (fork-only).
+"""Fork-only realm mutation tools.
 
-Adds the realm-level write surface the curated parameter list of
-``realm_tools.update_realm_settings`` does not cover: the SMTP block and
-arbitrary keys under ``realm.attributes`` (e.g. ``realmDescription``).
+Covers realm-level fields the curated parameter list of
+``realm_tools.update_realm_settings`` does not expose: the ``smtpServer``
+block, arbitrary keys under ``realm.attributes``, action-token lifespans,
+and the WebAuthn-passwordless policy fields.
 
 Kept as a separate module so ``realm_tools.py`` stays cherry-pickable from
-upstream. Surface contract: get-then-PUT the whole realm body, same as the
+upstream. Surface contract: GET-then-PUT the whole realm body, same as the
 upstream ``update_realm_settings`` shape — KC's PUT is partial-merge anyway,
 but the full-body roundtrip is defensive against KC versions that diverge.
 
-Added 2026-05-14 for the consolidated KC hardening US (Tetra #1114, tasks T20
-and T20b — IDP-tier SMTP convention).
+Added 2026-05-14 for the consolidated KC hardening US (Tetra #1114):
+- v1.4.0: ``update_realm_smtp_settings`` / ``clear_realm_smtp`` /
+  ``update_realm_attribute`` — T20 / T20b (IDP-tier SMTP convention).
+- v1.5.0: ``update_realm_action_token_lifespans`` /
+  ``update_realm_webauthn_passwordless_policy`` — T11 / T17 (admin token
+  lifespan standardisation + passkey-config revert).
 """
 
 from __future__ import annotations
@@ -94,9 +99,8 @@ async def update_realm_attribute(
     KC stores attribute values as strings, so the signature mirrors that.
 
     Note: top-level realm fields like ``actionTokenGeneratedByAdminLifespan``
-    are NOT under ``attributes`` — they live at the realm root. This tool
-    does not cover those (see follow-up US for an ``update_realm_token_lifespans``
-    tool if T11 needs an MCP path).
+    are NOT under ``attributes`` — they live at the realm root. See
+    ``update_realm_action_token_lifespans`` for those.
 
     Args:
         attribute_key: Attribute name (e.g. ``"realmDescription"``)
@@ -115,5 +119,122 @@ async def update_realm_attribute(
         "status": "updated",
         "message": (
             f"Realm {realm if realm else client.realm_name} attribute {attribute_key!r} updated"
+        ),
+    }
+
+
+@mcp.tool()
+async def update_realm_action_token_lifespans(
+    action_token_generated_by_admin_lifespan: Optional[int] = None,
+    action_token_generated_by_user_lifespan: Optional[int] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Update realm-level action-token lifespans (seconds).
+
+    These are top-level integer fields on the realm body, not under
+    ``attributes``. Only the parameters explicitly provided are written;
+    omitted parameters leave the existing value untouched.
+
+    - ``actionTokenGeneratedByAdminLifespan``: how long admin-issued action
+      tokens (reset password, verify email, etc.) remain valid. KC default
+      43200 (12 h). TETRA convention is 43200 across the fleet; some realms
+      had drifted to 604800 (7 d).
+    - ``actionTokenGeneratedByUserLifespan``: same shape for user-initiated
+      tokens. KC default 300 (5 min).
+
+    Args:
+        action_token_generated_by_admin_lifespan: seconds, or None to skip.
+        action_token_generated_by_user_lifespan: seconds, or None to skip.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message with the fields written.
+    """
+    current_realm = await client._make_request("GET", "", realm=realm)
+    written = []
+    if action_token_generated_by_admin_lifespan is not None:
+        current_realm["actionTokenGeneratedByAdminLifespan"] = (
+            action_token_generated_by_admin_lifespan
+        )
+        written.append(
+            f"actionTokenGeneratedByAdminLifespan={action_token_generated_by_admin_lifespan}"
+        )
+    if action_token_generated_by_user_lifespan is not None:
+        current_realm["actionTokenGeneratedByUserLifespan"] = (
+            action_token_generated_by_user_lifespan
+        )
+        written.append(
+            f"actionTokenGeneratedByUserLifespan={action_token_generated_by_user_lifespan}"
+        )
+    if not written:
+        return {
+            "status": "noop",
+            "message": "No fields provided; nothing written.",
+        }
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "message": (
+            f"Realm {realm if realm else client.realm_name} updated: " + ", ".join(written)
+        ),
+    }
+
+
+@mcp.tool()
+async def update_realm_webauthn_passwordless_policy(
+    require_resident_key: Optional[str] = None,
+    user_verification_requirement: Optional[str] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Update the realm's WebAuthn-passwordless policy fields.
+
+    Top-level realm fields, not under ``attributes``. KC's UI exposes more
+    knobs than these two; this tool covers the audit-flagged pair plus the
+    minimum needed to revert a half-configured policy back to the unset
+    state.
+
+    Accepted values match the KC admin REST API enum strings:
+    - ``require_resident_key`` ∈ {"not specified", "Yes", "No"}
+    - ``user_verification_requirement`` ∈ {"not specified", "required",
+      "preferred", "discouraged"}
+
+    To revert a half-configured realm to baseline, pass:
+        require_resident_key="not specified",
+        user_verification_requirement="not specified"
+
+    Args:
+        require_resident_key: webAuthnPolicyPasswordlessRequireResidentKey
+        user_verification_requirement:
+            webAuthnPolicyPasswordlessUserVerificationRequirement
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message with the fields written.
+    """
+    current_realm = await client._make_request("GET", "", realm=realm)
+    written = []
+    if require_resident_key is not None:
+        current_realm["webAuthnPolicyPasswordlessRequireResidentKey"] = require_resident_key
+        written.append(f"webAuthnPolicyPasswordlessRequireResidentKey={require_resident_key!r}")
+    if user_verification_requirement is not None:
+        current_realm["webAuthnPolicyPasswordlessUserVerificationRequirement"] = (
+            user_verification_requirement
+        )
+        written.append(
+            "webAuthnPolicyPasswordlessUserVerificationRequirement="
+            f"{user_verification_requirement!r}"
+        )
+    if not written:
+        return {
+            "status": "noop",
+            "message": "No fields provided; nothing written.",
+        }
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "message": (
+            f"Realm {realm if realm else client.realm_name} updated: " + ", ".join(written)
         ),
     }
