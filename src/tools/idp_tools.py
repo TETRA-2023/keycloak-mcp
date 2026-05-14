@@ -21,6 +21,15 @@ HTTP 200 but silently no-ops on that one field while accepting every
 other change in the same PUT body. To change providerId, delete +
 recreate via ``delete_identity_provider`` / ``create_identity_provider``
 (added in v1.8.0).
+
+Second KC v26 gotcha (2026-05-14): IDP mappers live at a separate URL
+namespace (``.../instances/{alias}/mappers``) and are NOT included in
+the IDP body returned by ``get_identity_provider``. So a delete+recreate
+of an IDP cascades the delete to its mappers but the recreate body
+doesn't restore them — the post-recreate IDP has zero mappers, breaking
+first-broker-login attribute propagation. Use ``list_idp_mappers`` to
+snapshot mappers BEFORE delete, then ``create_idp_mapper`` to replay
+them onto the new IDP (v1.9.0).
 """
 
 from __future__ import annotations
@@ -258,4 +267,132 @@ async def delete_identity_provider(
     return {
         "status": "deleted",
         "message": (f"IDP {alias!r} deleted from realm {realm if realm else client.realm_name}"),
+    }
+
+
+@mcp.tool()
+async def list_idp_mappers(
+    alias: str,
+    realm: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    List all attribute / role / group mappers attached to an identity
+    provider instance.
+
+    GET /admin/realms/{realm}/identity-provider/instances/{alias}/mappers
+
+    For KC-to-KC OIDC brokering, the TETRA fleet baseline is 3 attribute
+    mappers per IDP (``email``, ``firstName``, ``lastName``) using the
+    ``oidc-user-attribute-idp-mapper`` type. Some realms also have
+    hardcoded group/role mappers via ``oidc-hardcoded-group-idp-mapper``
+    or ``oidc-hardcoded-role-idp-mapper``.
+
+    Use this to snapshot mappers before a delete+recreate IDP cycle
+    (the recreate doesn't restore mappers — see module docstring).
+
+    Args:
+        alias: IDP alias.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        List of mapper dicts, each with ``id``, ``name``,
+        ``identityProviderAlias``, ``identityProviderMapper``, ``config``.
+    """
+    return await client._make_request(
+        "GET", f"/identity-provider/instances/{alias}/mappers", realm=realm
+    )
+
+
+@mcp.tool()
+async def create_idp_mapper(
+    alias: str,
+    body: Dict[str, Any],
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Create a mapper on an identity provider instance.
+
+    POST /admin/realms/{realm}/identity-provider/instances/{alias}/mappers
+
+    Pass a mapper body containing at minimum:
+
+    - ``name``: human label (e.g. ``"email"``)
+    - ``identityProviderAlias``: must match the URL alias param
+    - ``identityProviderMapper``: KC v26 mapper type — for OIDC IDPs use the
+      ``oidc-`` prefixed variants:
+
+      * ``oidc-user-attribute-idp-mapper`` — claim-to-attribute mapping
+      * ``oidc-hardcoded-group-idp-mapper`` — assign a fixed group
+      * ``oidc-hardcoded-role-idp-mapper`` — assign a fixed role
+      * ``oidc-advanced-group-idp-mapper`` — claim-value-conditional group
+
+      ⚠️ KC v26 NPE gotcha: non-prefixed forms (e.g.
+      ``user-attribute-idp-mapper``) are accepted by the API and saved
+      to the DB but trigger an NPE at runtime in
+      ``IdentityBrokerService.preprocessFederatedIdentity``, blocking
+      all logins through that IDP. See ``BM:
+      reference/keycloak-setup-realms-security-baseline-identity-brokering``.
+
+    - ``config``: dict of mapper-type-specific keys. For attribute
+      mappers: ``claim`` (upstream claim name), ``user.attribute``
+      (local attribute name), ``syncMode``
+      (``"INHERIT"`` / ``"FORCE"`` / ``"LEGACY"``).
+
+    Auto-strips ``id`` from the body (KC assigns).
+
+    Args:
+        alias: IDP alias the mapper attaches to.
+        body: Mapper body (see above).
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message.
+    """
+    body = {k: v for k, v in body.items() if k != "id"}
+    await client._make_request(
+        "POST",
+        f"/identity-provider/instances/{alias}/mappers",
+        data=body,
+        realm=realm,
+    )
+    mapper_name = body.get("name", "<unknown>")
+    return {
+        "status": "created",
+        "message": (
+            f"IDP mapper {mapper_name!r} created on {alias!r} in realm "
+            f"{realm if realm else client.realm_name}"
+        ),
+    }
+
+
+@mcp.tool()
+async def delete_idp_mapper(
+    alias: str,
+    mapper_id: str,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Delete a mapper from an identity provider instance.
+
+    DELETE /admin/realms/{realm}/identity-provider/instances/{alias}/mappers/{mapper_id}
+
+    Args:
+        alias: IDP alias.
+        mapper_id: Mapper internal UUID (from ``list_idp_mappers``).
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message.
+    """
+    await client._make_request(
+        "DELETE",
+        f"/identity-provider/instances/{alias}/mappers/{mapper_id}",
+        realm=realm,
+    )
+    return {
+        "status": "deleted",
+        "message": (
+            f"IDP mapper {mapper_id!r} deleted from {alias!r} in realm "
+            f"{realm if realm else client.realm_name}"
+        ),
     }
