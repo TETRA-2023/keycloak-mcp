@@ -19,6 +19,9 @@ Added 2026-05-14 for the consolidated KC hardening US (Tetra #1114):
   lifespan standardisation + passkey-config revert).
 - v1.6.0: ``update_realm_i18n`` / ``update_realm_brute_force_extra`` —
   T15 / T18 (i18n convergence on [en, fr] + maxTemporaryLockouts gap).
+- v1.7.0: ``update_realm_password_policy`` / ``delete_realm`` —
+  T05/T06/T21 (passwordPolicy as a top-level string) + T12/T13 follow-up
+  (realm lifecycle completeness for the Ansible enforce role).
 """
 
 from __future__ import annotations
@@ -337,4 +340,66 @@ async def update_realm_brute_force_extra(
         "message": (
             f"Realm {realm if realm else client.realm_name} updated: " + ", ".join(written)
         ),
+    }
+
+
+@mcp.tool()
+async def update_realm_password_policy(
+    password_policy: str,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Set the realm-level ``passwordPolicy``.
+
+    KC stores password policy as a single string with policies separated by
+    `` and `` — e.g. ``length(12) and upperCase(1) and lowerCase(1) and
+    digits(1) and specialChars(1) and notUsername and passwordHistory(3)``.
+
+    KC's serialiser normalises ``notUsername`` (which takes no arg) to
+    ``notUsername(undefined)`` in the stored form — functionally equivalent.
+
+    TETRA fleet convention:
+    ``length(12) and upperCase(1) and lowerCase(1) and digits(1) and
+    specialChars(1) and notUsername and passwordHistory(3)``
+
+    Args:
+        password_policy: Full replacement policy string.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message.
+    """
+    current_realm = await client._make_request("GET", "", realm=realm)
+    current_realm["passwordPolicy"] = password_policy
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "message": (f"Realm {realm if realm else client.realm_name} passwordPolicy updated"),
+    }
+
+
+@mcp.tool()
+async def delete_realm(realm: str) -> Dict[str, str]:
+    """
+    Delete a realm. DESTRUCTIVE — cascades to users, clients, IDPs, mappers,
+    groups, roles, and federated identity records.
+
+    The ``realm`` argument is required here (no default-realm fallback) to
+    reduce the risk of unintended deletion via the wrapper's default-realm
+    shortcut. Always snapshot the realm with the structural GETs
+    (``get_realm_info`` / ``list_users`` / ``list_clients`` /
+    ``list_identity_providers``) before calling. The KC postgres Duplicati
+    backup is the full-restore path if the structural snapshot is
+    insufficient (credentials / TOTP seeds not captured by the wrapper).
+
+    Args:
+        realm: Realm name to delete. Required.
+
+    Returns:
+        Status message.
+    """
+    await client._make_request("DELETE", "", realm=realm)
+    return {
+        "status": "deleted",
+        "message": f"Realm {realm!r} deleted",
     }
