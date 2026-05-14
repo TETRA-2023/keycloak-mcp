@@ -4,7 +4,7 @@
 
 MCP server for Keycloak administration. Fork of `idoyudha/mcp-keycloak` v1.2.2
 with bearer-token middleware, `/health`, OAuth2 `client_credentials` grant,
-and KC v17+ URL-prefix support. Exposes 83 admin-API tools as MCP `@tool()`
+and KC v17+ URL-prefix support. Exposes 85 admin-API tools as MCP `@tool()`
 definitions, suitable for any client that brokers MCP over streamable-HTTP.
 
 - **Package**: `keycloak-mcp`
@@ -30,7 +30,7 @@ src/
     user_tools.py            — 9 tools
     client_tools.py          — 9 tools
     realm_tools.py           — 9 tools (upstream, cherry-pick lane)
-    realm_smtp_tools.py      — 5 tools (fork-only: SMTP, attribute, action-token, webauthn-passwordless)
+    realm_smtp_tools.py      — 7 tools (fork-only: SMTP, attribute, action-token, webauthn-passwordless, i18n, brute-force-extra)
     role_tools.py            — 11 tools
     group_tools.py           — 9 tools
     authentication_management_tools.py  — 31 tools (registered via __init__.py)

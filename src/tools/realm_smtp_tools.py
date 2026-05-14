@@ -3,7 +3,8 @@
 Covers realm-level fields the curated parameter list of
 ``realm_tools.update_realm_settings`` does not expose: the ``smtpServer``
 block, arbitrary keys under ``realm.attributes``, action-token lifespans,
-and the WebAuthn-passwordless policy fields.
+WebAuthn-passwordless policy fields, internationalisation, and the
+brute-force fields upstream omits.
 
 Kept as a separate module so ``realm_tools.py`` stays cherry-pickable from
 upstream. Surface contract: GET-then-PUT the whole realm body, same as the
@@ -16,11 +17,13 @@ Added 2026-05-14 for the consolidated KC hardening US (Tetra #1114):
 - v1.5.0: ``update_realm_action_token_lifespans`` /
   ``update_realm_webauthn_passwordless_policy`` — T11 / T17 (admin token
   lifespan standardisation + passkey-config revert).
+- v1.6.0: ``update_realm_i18n`` / ``update_realm_brute_force_extra`` —
+  T15 / T18 (i18n convergence on [en, fr] + maxTemporaryLockouts gap).
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ..common.server import mcp
 from .keycloak_client import KeycloakClient
@@ -226,6 +229,103 @@ async def update_realm_webauthn_passwordless_policy(
             "webAuthnPolicyPasswordlessUserVerificationRequirement="
             f"{user_verification_requirement!r}"
         )
+    if not written:
+        return {
+            "status": "noop",
+            "message": "No fields provided; nothing written.",
+        }
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "message": (
+            f"Realm {realm if realm else client.realm_name} updated: " + ", ".join(written)
+        ),
+    }
+
+
+@mcp.tool()
+async def update_realm_i18n(
+    enabled: Optional[bool] = None,
+    supported_locales: Optional[List[str]] = None,
+    default_locale: Optional[str] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Update realm internationalisation: enabled flag, supported locales list,
+    and default locale.
+
+    Top-level realm fields, not under ``attributes``. Note that the upstream
+    ``update_realm_settings`` already exposes ``default_locale`` standalone;
+    this tool covers the two companion fields it omits. Pass all three here
+    when flipping a realm from disabled to enabled in one go.
+
+    TETRA fleet convention: ``enabled=True``,
+    ``supported_locales=["en", "fr"]``, ``default_locale="en"``.
+
+    Args:
+        enabled: internationalizationEnabled boolean.
+        supported_locales: list of locale codes (e.g. ``["en", "fr"]``).
+        default_locale: default locale code (e.g. ``"en"``).
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message with the fields written.
+    """
+    current_realm = await client._make_request("GET", "", realm=realm)
+    written = []
+    if enabled is not None:
+        current_realm["internationalizationEnabled"] = enabled
+        written.append(f"internationalizationEnabled={enabled}")
+    if supported_locales is not None:
+        current_realm["supportedLocales"] = supported_locales
+        written.append(f"supportedLocales={supported_locales!r}")
+    if default_locale is not None:
+        current_realm["defaultLocale"] = default_locale
+        written.append(f"defaultLocale={default_locale!r}")
+    if not written:
+        return {
+            "status": "noop",
+            "message": "No fields provided; nothing written.",
+        }
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "message": (
+            f"Realm {realm if realm else client.realm_name} updated: " + ", ".join(written)
+        ),
+    }
+
+
+@mcp.tool()
+async def update_realm_brute_force_extra(
+    max_temporary_lockouts: Optional[int] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Update brute-force fields not exposed by ``update_realm_settings``.
+
+    Specifically ``maxTemporaryLockouts`` — the count of temporary lockouts
+    a user can accumulate before KC promotes them to permanent lockout (when
+    ``permanentLockout=True``). KC default 0 (no permanent escalation); TETRA
+    convention is 1 on the realms where we want strict admin-grade lockout
+    (master / tetra; SAI inherited the same).
+
+    The companion ``permanent_lockout`` field IS exposed by
+    ``update_realm_settings``; pair the two when flipping a realm to the
+    "one temporary then permanent" posture.
+
+    Args:
+        max_temporary_lockouts: int, or None to skip.
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status message with the fields written.
+    """
+    current_realm = await client._make_request("GET", "", realm=realm)
+    written = []
+    if max_temporary_lockouts is not None:
+        current_realm["maxTemporaryLockouts"] = max_temporary_lockouts
+        written.append(f"maxTemporaryLockouts={max_temporary_lockouts}")
     if not written:
         return {
             "status": "noop",
