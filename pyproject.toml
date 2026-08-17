@@ -16,7 +16,7 @@ dependencies = [
     "uvicorn>=0.52.1",
     "starlette>=1.4.1",
     "pydantic>=2.4.0",
-    "pydantic-settings>=2.14.2",
+    "pydantic-settings>=2.15.0",
     "anyio>=4.14.2",
 ]
 
