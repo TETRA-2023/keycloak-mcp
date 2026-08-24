@@ -10,7 +10,7 @@ authors = [
     { name = "Ido Yudha (upstream author)" },
 ]
 dependencies = [
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.3",
     "httpx>=0.28.1",
     "mcp[cli]>=1.28.1",
     "uvicorn>=0.52.1",
