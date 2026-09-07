@@ -69,5 +69,5 @@ dev = [
     "pytest-cov>=4.1.0",
     "ruff>=0.16.5",
     "pre-commit>=4.6.2",
-    "python-semantic-release>=10.6.1",
+    "python-semantic-release>=10.6.2",
 ]
