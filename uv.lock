@@ -543,7 +543,7 @@ wheels = [
 
 [[package]]
 name = "keycloak-mcp"
-version = "1.9.3"
+version = "1.9.4"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -570,7 +570,7 @@ dev = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.15.1" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.28.1" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.28.1,<2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
