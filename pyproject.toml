@@ -1,6 +1,6 @@
 [project]
 name = "keycloak-mcp"
-version = "1.9.9"
+version = "1.9.10"
 description = "MCP server for Keycloak administration"
 readme = "README.md"
 license = { text = "MIT" }
