@@ -540,7 +540,7 @@ wheels = [
 
 [[package]]
 name = "keycloak-mcp"
-version = "1.9.15"
+version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

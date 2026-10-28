@@ -1,5 +1,8 @@
 # Changelog
 
+> Frozen on 2026-10-28 at v1.9.16. Later versions: see the
+> [GitHub Releases](https://github.com/TETRA-2023/keycloak-mcp/releases).
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
