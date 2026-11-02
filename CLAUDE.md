@@ -95,7 +95,9 @@ so upstream fixes can be cherry-picked cleanly:
   `CHANGELOG.md`, this file, `.github/workflows/{ci,release}.yml`.
 - Modified upstream files: `src/main.py`, `src/common/{server,config}.py`,
   `src/tools/{__init__,keycloak_client}.py`, `Dockerfile`, `pyproject.toml`,
-  `.env.example`.
+  `.env.example`, `src/tools/authentication_management_tools.py`
+  (`update_flow_executions` sends one PUT per execution; upstream sends the
+  whole list and Keycloak answers 400).
 - Untouched upstream files (cherry-pick freely):
-  `src/tools/{user,client,realm,role,group,authentication_management}_tools.py`,
+  `src/tools/{user,client,realm,role,group}_tools.py`,
   `src/common/const.py`.

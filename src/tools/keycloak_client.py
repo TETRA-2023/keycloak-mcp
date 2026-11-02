@@ -17,6 +17,9 @@ import httpx
 from ..common.config import KEYCLOAK_CFG
 from ..common.const import DEFAULT_REALM, DEFAULT_REQUEST_TIMEOUT
 
+# Cap on the Keycloak error body echoed into exception messages.
+_ERROR_BODY_MAX = 2000
+
 
 class KeycloakClient:
     def __init__(self) -> None:
@@ -126,6 +129,15 @@ class KeycloakClient:
                 return response.json()
             return None
 
+        except httpx.HTTPStatusError as e:
+            # Surface Keycloak's error body (e.g. {"errorMessage": ...}): without it a
+            # 400 is undiagnosable. Same exception type so existing handlers still match.
+            body = e.response.text[:_ERROR_BODY_MAX]
+            raise httpx.HTTPStatusError(
+                f"{e} — Keycloak response: {body or '<empty body>'}",
+                request=e.request,
+                response=e.response,
+            ) from e
         except httpx.RequestError as e:
             raise Exception(f"Keycloak API request failed: {str(e)}") from e
 
