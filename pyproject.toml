@@ -15,9 +15,9 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.30.0,<2",
     "uvicorn>=0.54.0",
-    "starlette>=1.9.0",
-    "pydantic>=2.14.1",
-    "pydantic-settings>=2.16.1",
+    "starlette>=1.10.0",
+    "pydantic>=2.14.2",
+    "pydantic-settings>=2.16.2",
     "anyio>=4.15.1",
 ]
 
@@ -61,8 +61,8 @@ token = { env = "GH_TOKEN" }
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
     "pytest-cov>=4.1.0",
     "ruff>=0.17.2",
     "pre-commit>=4.7.0",
