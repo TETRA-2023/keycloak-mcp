@@ -201,9 +201,14 @@ async def update_flow_executions(
     flow_alias: str,
     executions: List[Dict[str, Any]],
     realm: Optional[str] = None,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """
-    Update authentication executions of a flow.
+    Update authentication executions of a flow (e.g. change their requirement).
+
+    Keycloak's endpoint accepts ONE execution per PUT, so each item of
+    ``executions`` is sent as its own request, in order. Each item needs at
+    least ``id`` and the fields to change (typically ``requirement``); an item
+    exactly as returned by ``get_flow_executions`` is accepted as-is.
 
     Args:
         flow_alias: The flow's alias
@@ -211,15 +216,26 @@ async def update_flow_executions(
         realm: Target realm (uses default if not specified)
 
     Returns:
-        Status message
+        Status message and the ids of the updated executions. If one PUT
+        fails, the error names that execution and lists the ones already
+        applied (Keycloak has no transaction across executions).
     """
-    await client._make_request(
-        "PUT",
-        f"/authentication/flows/{flow_alias}/executions",
-        data=executions,
-        realm=realm,
-    )
-    return {"status": "Flow executions updated successfully"}
+    updated: List[str] = []
+    for execution in executions:
+        try:
+            await client._make_request(
+                "PUT",
+                f"/authentication/flows/{flow_alias}/executions",
+                data=execution,
+                realm=realm,
+            )
+        except Exception as e:
+            raise Exception(
+                f"Failed to update execution {execution.get('id', '<no id>')}: {e}. "
+                f"Already updated: {updated or 'none'}"
+            ) from e
+        updated.append(execution.get("id", "<no id>"))
+    return {"status": "Flow executions updated successfully", "updated": updated}
 
 
 @mcp.tool()
