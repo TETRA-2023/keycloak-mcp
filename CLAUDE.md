@@ -85,6 +85,13 @@ uv run pytest tests/ -m integration  # requires live Keycloak
 - **Secrets**: `pydantic.SecretStr`. Never log token/password/client_secret values
 - **Tool pattern**: `@mcp.tool()` → `client._make_request(method, endpoint)` → return JSON
 
+## Public repo
+
+- This repo is **public**: no internal hosts, IPs, ticket numbers, realm or flow
+  names in commits, PRs, issues or tests. Describe problems in generic terms.
+- After cloning, run `gh repo set-default TETRA-2023/keycloak-mcp`: as a fork,
+  `gh pr create` otherwise targets upstream `idoyudha/mcp-keycloak`.
+
 ## Fork hygiene
 
 The fork tracks upstream selectively. Keep the fork-divergent surface minimal
