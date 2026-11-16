@@ -378,6 +378,93 @@ async def update_realm_password_policy(
     }
 
 
+# Tool parameter -> realm representation field holding a flow alias.
+_FLOW_BINDINGS = {
+    "browser_flow": "browserFlow",
+    "registration_flow": "registrationFlow",
+    "direct_grant_flow": "directGrantFlow",
+    "reset_credentials_flow": "resetCredentialsFlow",
+    "client_authentication_flow": "clientAuthenticationFlow",
+    "docker_authentication_flow": "dockerAuthenticationFlow",
+    "first_broker_login_flow": "firstBrokerLoginFlow",
+}
+
+
+@mcp.tool()
+async def update_realm_flow_bindings(
+    browser_flow: Optional[str] = None,
+    registration_flow: Optional[str] = None,
+    direct_grant_flow: Optional[str] = None,
+    reset_credentials_flow: Optional[str] = None,
+    client_authentication_flow: Optional[str] = None,
+    docker_authentication_flow: Optional[str] = None,
+    first_broker_login_flow: Optional[str] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Bind authentication flows to the realm (Authentication -> flow bindings).
+
+    Each parameter takes the ALIAS of a top-level flow of the realm (as listed
+    by ``list_authentication_flows``). Only the parameters given are written;
+    the other bindings keep their current value.
+
+    Every alias is checked against the realm's top-level flows before the
+    realm is written: binding a missing flow (e.g. a typo on the browser
+    flow) would break login for the whole realm, so an unknown alias raises
+    and nothing is written.
+
+    Args:
+        browser_flow: Alias for ``browserFlow`` (interactive login).
+        registration_flow: Alias for ``registrationFlow``.
+        direct_grant_flow: Alias for ``directGrantFlow`` (password grant).
+        reset_credentials_flow: Alias for ``resetCredentialsFlow``.
+        client_authentication_flow: Alias for ``clientAuthenticationFlow``.
+        docker_authentication_flow: Alias for ``dockerAuthenticationFlow``.
+        first_broker_login_flow: Alias for ``firstBrokerLoginFlow`` (realm default
+            for identity providers that do not set their own).
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status, and for each binding written its previous and new alias.
+    """
+    requested = {
+        "browser_flow": browser_flow,
+        "registration_flow": registration_flow,
+        "direct_grant_flow": direct_grant_flow,
+        "reset_credentials_flow": reset_credentials_flow,
+        "client_authentication_flow": client_authentication_flow,
+        "docker_authentication_flow": docker_authentication_flow,
+        "first_broker_login_flow": first_broker_login_flow,
+    }
+    given = {
+        _FLOW_BINDINGS[param]: value for param, value in requested.items() if value is not None
+    }
+    if not given:
+        return {"status": "noop", "message": "No binding provided; nothing written."}
+
+    flows = await client._make_request("GET", "/authentication/flows", realm=realm)
+    known = {flow.get("alias") for flow in flows or []}
+    unknown = sorted(alias for alias in given.values() if alias not in known)
+    if unknown:
+        raise ValueError(
+            f"Flow alias(es) not found among the realm's top-level flows: {unknown}. "
+            "Nothing was written."
+        )
+
+    current_realm = await client._make_request("GET", "", realm=realm)
+    changes = {
+        field: {"previous": current_realm.get(field), "new": alias}
+        for field, alias in given.items()
+    }
+    current_realm.update(given)
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "realm": realm if realm else client.realm_name,
+        "bindings": changes,
+    }
+
+
 @mcp.tool()
 async def delete_realm(realm: str) -> Dict[str, str]:
     """
