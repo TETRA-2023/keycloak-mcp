@@ -3,8 +3,9 @@
 Covers realm-level fields the curated parameter list of
 ``realm_tools.update_realm_settings`` does not expose: the ``smtpServer``
 block, arbitrary keys under ``realm.attributes``, action-token lifespans,
-WebAuthn-passwordless policy fields, internationalisation, and the
-brute-force fields upstream omits.
+WebAuthn-passwordless policy fields, internationalisation, the
+brute-force fields upstream omits, and the realm's authentication flow
+bindings.
 
 Kept as a separate module so ``realm_tools.py`` stays cherry-pickable from
 upstream. Surface contract: GET-then-PUT the whole realm body, same as the
@@ -375,6 +376,97 @@ async def update_realm_password_policy(
     return {
         "status": "updated",
         "message": (f"Realm {realm if realm else client.realm_name} passwordPolicy updated"),
+    }
+
+
+# Flow type (``providerId``) each binding needs: binding a flow of the other
+# type (e.g. the client-authentication flow as the browser flow) breaks login.
+_CLIENT_FLOW_BINDINGS = {"clientAuthenticationFlow"}
+
+
+@mcp.tool()
+async def update_realm_flow_bindings(
+    browser_flow: Optional[str] = None,
+    registration_flow: Optional[str] = None,
+    direct_grant_flow: Optional[str] = None,
+    reset_credentials_flow: Optional[str] = None,
+    client_authentication_flow: Optional[str] = None,
+    docker_authentication_flow: Optional[str] = None,
+    first_broker_login_flow: Optional[str] = None,
+    realm: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Bind authentication flows to the realm (Authentication -> flow bindings).
+
+    Each parameter takes the ALIAS of a top-level flow of the realm (as listed
+    by ``list_authentication_flows``). Only the parameters given are written;
+    the other bindings keep their current value.
+
+    Every alias is checked against the realm's top-level flows before the
+    realm is written: binding a missing flow (e.g. a typo on the browser
+    flow) would break login for the whole realm, so an unknown alias raises
+    and nothing is written. The flow type is checked too:
+    ``client_authentication_flow`` takes a ``client-flow``, every other
+    binding a ``basic-flow``; a flow of the wrong type raises the same way.
+
+    Args:
+        browser_flow: Alias for ``browserFlow`` (interactive login).
+        registration_flow: Alias for ``registrationFlow``.
+        direct_grant_flow: Alias for ``directGrantFlow`` (password grant).
+        reset_credentials_flow: Alias for ``resetCredentialsFlow``.
+        client_authentication_flow: Alias for ``clientAuthenticationFlow``
+            (must be a ``client-flow``).
+        docker_authentication_flow: Alias for ``dockerAuthenticationFlow``.
+        first_broker_login_flow: Alias for ``firstBrokerLoginFlow`` (realm default
+            for identity providers that do not set their own).
+        realm: Target realm (uses default if not specified)
+
+    Returns:
+        Status, and for each binding written its previous and new alias.
+    """
+    requested = {
+        "browserFlow": browser_flow,
+        "registrationFlow": registration_flow,
+        "directGrantFlow": direct_grant_flow,
+        "resetCredentialsFlow": reset_credentials_flow,
+        "clientAuthenticationFlow": client_authentication_flow,
+        "dockerAuthenticationFlow": docker_authentication_flow,
+        "firstBrokerLoginFlow": first_broker_login_flow,
+    }
+    given = {field: alias for field, alias in requested.items() if alias is not None}
+    if not given:
+        return {"status": "noop", "message": "No binding provided; nothing written."}
+
+    flows = await client._make_request("GET", "/authentication/flows", realm=realm)
+    provider_by_alias = {flow.get("alias"): flow.get("providerId") for flow in flows or []}
+    unknown = sorted(alias for alias in given.values() if alias not in provider_by_alias)
+    if unknown:
+        raise ValueError(
+            f"Flow alias(es) not found among the realm's top-level flows: {unknown}. "
+            "Nothing was written."
+        )
+    wrong_type = []
+    for field, alias in given.items():
+        expected = "client-flow" if field in _CLIENT_FLOW_BINDINGS else "basic-flow"
+        actual = provider_by_alias[alias]
+        if actual is not None and actual != expected:
+            wrong_type.append(f"{field}={alias!r} is a {actual}, expected a {expected}")
+    if wrong_type:
+        raise ValueError(
+            f"Flow(s) of the wrong type: {'; '.join(wrong_type)}. Nothing was written."
+        )
+
+    current_realm = await client._make_request("GET", "", realm=realm)
+    changes = {
+        field: {"previous": current_realm.get(field), "new": alias}
+        for field, alias in given.items()
+    }
+    current_realm.update(given)
+    await client._make_request("PUT", "", data=current_realm, realm=realm)
+    return {
+        "status": "updated",
+        "realm": realm if realm else client.realm_name,
+        "bindings": changes,
     }
 
 
