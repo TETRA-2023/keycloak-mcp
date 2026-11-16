@@ -206,9 +206,15 @@ async def update_flow_executions(
     Update authentication executions of a flow (e.g. change their requirement).
 
     Keycloak's endpoint accepts ONE execution per PUT, so each item of
-    ``executions`` is sent as its own request, in order. Each item needs at
-    least ``id`` and the fields to change (typically ``requirement``); an item
-    exactly as returned by ``get_flow_executions`` is accepted as-is.
+    ``executions`` is sent as its own request, in order. Each item needs
+    ``id`` and the fields to change (typically ``requirement``).
+
+    Keycloak writes every field of the PUT body, so a field left out is not
+    "unchanged": a missing ``priority`` resets the execution's priority to 0
+    and moves it to the top of its flow. To avoid that, the flow's current
+    executions are read first and each item is merged over its current
+    representation: fields not given keep their current value. Every ``id``
+    is checked against the flow before any PUT is sent.
 
     Args:
         flow_alias: The flow's alias
@@ -220,13 +226,24 @@ async def update_flow_executions(
         fails, the error names that execution and lists the ones already
         applied (Keycloak has no transaction across executions).
     """
+    current = await client._make_request(
+        "GET", f"/authentication/flows/{flow_alias}/executions", realm=realm
+    )
+    current_by_id = {item["id"]: item for item in current or [] if "id" in item}
+    unknown = [e.get("id", "<no id>") for e in executions if e.get("id") not in current_by_id]
+    if unknown:
+        raise ValueError(
+            f"Execution id(s) not found in flow {flow_alias!r}: {unknown}. Nothing was updated."
+        )
+
     updated: List[str] = []
     for execution in executions:
+        body = {**current_by_id[execution["id"]], **execution}
         try:
             await client._make_request(
                 "PUT",
                 f"/authentication/flows/{flow_alias}/executions",
-                data=execution,
+                data=body,
                 realm=realm,
             )
         except Exception as e:
